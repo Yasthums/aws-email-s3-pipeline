@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Configuração do Amazon SES para receber e-mails e armazená-los no Amazon S3
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Nome do domínio verificado no SES para receber e-mails
+  S3BucketName:
+    Type: String
+    Description: Nome do bucket S3 onde os e-mails serão armazenados
+
+Resources:
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Retain
+
+  S3BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 'ses.amazonaws.com'
+            Action: 's3:PutObject'
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
+            Condition:
+              StringEquals:
+                aws:Referer: !Ref AWS::AccountId
+
+  SESReceiptRuleSet:
+    Type: 'AWS::SES::ReceiptRuleSet'
+    Properties:
+      RuleSetName: 'DefaultRuleSet'
+
+  SESReceiptRule:
+    Type: 'AWS::SES::ReceiptRule'
+    Properties:
+      RuleSetName: !Ref SESReceiptRuleSet
+      Rule:
+        Name: 'StoreEmailsInS3'
+        Enabled: true
+        Recipients:
+          - !Ref DomainName
+        Actions:
+          - S3Action:
+              BucketName: !Ref S3Bucket
+              ObjectKeyPrefix: 'emails/'
+        ScanEnabled: true
+      After: 'DefaultRule'
+
+Outputs:
+  S3BucketNameOutput:
+    Description: Nome do bucket S3 onde os e-mails são armazenados
+    Value: !Ref S3Bucket
